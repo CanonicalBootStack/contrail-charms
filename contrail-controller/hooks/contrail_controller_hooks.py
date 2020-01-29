@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import json
+import os
 import sys
 import yaml
 from socket import gethostbyname, gethostname, getfqdn
@@ -27,7 +28,10 @@ from charmhelpers.core.hookenv import (
     open_port,
     close_port,
 )
-
+from charmhelpers.core.host import (
+    rsync,
+    write_file,
+)
 from charmhelpers.core.unitdata import kv
 from charmhelpers.contrib.charmsupport import nrpe
 
@@ -37,6 +41,11 @@ import docker_utils
 
 hooks = Hooks()
 config = config()
+
+STATS_CRONFILE = "/etc/cron.d/rabbitmq-stats"
+STATS_DATAFILE = "/var/lib/misc/rabbitmq-check/rabbitmq_queue_stats.dat"
+CRONJOB_CMD = ("{schedule} root timeout -k 10s -s SIGINT {timeout} "
+               "{command} 2>&1 | logger -p local0.notice\n")
 
 
 @hooks.hook("install.real")
@@ -578,6 +587,16 @@ def update_nrpe_config():
     common_utils.rsync_nrpe_checks(plugins_dir)
     common_utils.add_nagios_to_sudoers()
 
+    if config['stats_cron_schedule']:
+        script = os.path.join(common_utils.SCRIPTS_DIR, 'collect_rabbitmq_stats.sh')
+        cronjob = CRONJOB_CMD.format(schedule=config['stats_cron_schedule'],
+                                     timeout=config['cron-timeout'],
+                                     command=script)
+        common_utils.rsync_script('collect_rabbitmq_stats.sh')
+        write_file(STATS_CRONFILE, cronjob)
+    elif os.path.isfile(STATS_CRONFILE):
+        os.remove(STATS_CRONFILE)
+
     check_ui_cmd = 'check_http -H {} -p 8143 -S'.format(component_ip)
     nrpe_compat.add_check(
         shortname='check_contrail_web_ui',
@@ -598,6 +617,18 @@ def update_nrpe_config():
         description='Check contrail-status',
         check_cmd=common_utils.contrail_status_cmd(utils.MODULE, plugins_dir)
     )
+
+    if config['queue_thresholds']:
+        cmd = ""
+        # If value of queue_thresholds is incorrect we want the hook to fail
+        for item in yaml.safe_load(config['queue_thresholds']):
+            cmd += ' -c "{}" "{}" {} {}'.format(*item)
+        nrpe_compat.add_check(
+            shortname='rabbitmq_queue',
+            description='Check RabbitMQ Queues',
+            check_cmd='{}/check_rabbitmq_queues.py{} {}'.format(
+                        plugins_dir, cmd, STATS_DATAFILE)
+        )
 
     nrpe_compat.write()
 

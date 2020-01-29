@@ -29,6 +29,7 @@ from charmhelpers.core.host import (
 from charmhelpers.core.templating import render
 
 config = config()
+SCRIPTS_DIR = '/usr/local/bin'
 
 
 def get_ip(config_param="control-network", fallback=None):
@@ -303,6 +304,16 @@ def rsync_nrpe_checks(plugins_dir):
                                     'plugins/')
     rsync(charm_plugin_dir,
           plugins_dir,
+          options=['--executability'])
+
+
+def rsync_script(script_file):
+    charm_script = os.path.join(charm_dir(),
+                                'files',
+                                script_file
+    )
+    rsync(charm_script,
+          SCRIPTS_DIR,
           options=['--executability'])
 
 
