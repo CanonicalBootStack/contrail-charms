@@ -21,7 +21,7 @@ config = config()
 DOCKER_ADD_PACKAGES = ["docker-compose"]
 DOCKER_CLI = "/usr/bin/docker"
 DOCKER_COMPOSE_CLI = "docker-compose"
-
+EXTRA_PACKAGES = ["lockfile-progs"]
 
 def _format_curl_https_proxy_opt():
     proxy_settings = env_proxy_settings(['https'])
@@ -68,6 +68,7 @@ def install():
     apt_update()
     apt_install(docker_package)
     apt_install(DOCKER_ADD_PACKAGES)
+    apt_install(EXTRA_PACKAGES)
     _render_config()
     _apply_insecure()
     _login()
